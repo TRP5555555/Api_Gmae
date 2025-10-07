@@ -2,7 +2,8 @@ import express from "express";
 import { User } from "../controller/gameApi";
 
 export const router = express.Router();
-router.get('/index', (_req, res) => {
+
+router.get('/', (_req, res) => {
     res.send("GameShop");
 });
 
