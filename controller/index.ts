@@ -149,3 +149,6 @@ router.post("/register", upload.single("profile_image"), async (req, res) => {
     res.status(500).json({ error: e.message || "Register failed" });
   }
 });
+router.get('/index', (req, res) => {
+    res.send("GameShop");
+});
