@@ -6,6 +6,7 @@ import cors from 'cors';
 
 import { router as users } from "./controller/index";
 import { router as upload } from "./controller/upload";
+import { router as index } from "./controller/users";
 
 
 export const app = express();
@@ -33,5 +34,9 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // routes
 app.use("/users", users);
+
 app.use("/uploads", upload);
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+
+app.use("/", index);
