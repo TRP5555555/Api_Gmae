@@ -1,5 +1,11 @@
-
+import express from "express";
 import { User } from "../controller/gameApi";
+
+export const router = express.Router();
+
+router.get('/', (_req, res) => {
+    res.send("GameShop");
+});
 
 // export const mockUsers: User[] = [
 //   {
