@@ -1,14 +1,13 @@
-// server.ts
 import express from "express";
 import session from "express-session";
 import path from "path";
 import cors from "cors";
 
 import { router as users } from "./controller/index";
+import walletRouter from './controller/wallet'; // ✅ เพิ่มตรงนี้
 
 export const app = express();
 
-// --- CORS setup ---
 app.use(cors({
   origin: 'http://localhost:4200',
   credentials: true,
@@ -16,14 +15,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type','Authorization','Accept']
 }));
 
-
-// --- JSON parser (สำหรับ API JSON) ---
 app.use(express.json({ limit: "5mb" }));
-
-// --- Upload folder ---
 export const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads'); 
 
-// --- Session ---
 app.use(session({
   secret: "my_secret_key",
   resave: false,
@@ -31,11 +25,11 @@ app.use(session({
   cookie: { secure: false }
 }));
 
-// --- Serve uploads folder ---
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// --- Routes ---
 app.use("/users", users);
 
-// --- Fallback route ---
+// ✅ เพิ่ม wallet router
+app.use("/api/wallet", walletRouter);
+
 app.get("/", (_req, res) => res.send("Server is running..."));
