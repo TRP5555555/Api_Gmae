@@ -21,7 +21,7 @@ fs.mkdirSync(dir, { recursive: true });
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, dir),
   filename: (_req, _file, cb) =>
-    cb(null, Date.now() + "-" + Math.random().toString(16).slice(2)) // ชื่อชั่วคราว ไม่ใส่ .ext
+    Date.now() + "-" + Math.random().toString(16).slice(2) + path.extname(_file.originalname)
 });
 
 const upload = multer({
@@ -31,121 +31,58 @@ const upload = multer({
     /image\/(png|jpeg|jpg|webp|gif)/.test(file.mimetype) ? cb(null, true) : cb(new Error("Only image files"))
 });
 
-// POST /users/avatar  field: profile_image  -> บันทึกเป็น .png เสมอ
-router.post("/avatar", upload.single("profile_image"), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "no file" });
+// --- REGISTER ---
+router.post(
+  "/register",
+  upload.fields([{ name: "profile_image", maxCount: 1 }]),
+  async (req, res) => {
+    try {
+      console.log("=== REGISTER REQUEST ===");
+      console.log("BODY:", req.body);
+      console.log("FILES:", req.files);
 
-    const outName = `${Date.now()}-${Math.random().toString(16).slice(2)}.png`;
-    const outPath = path.join(dir, outName);
+      const { email, username, password } = req.body;
 
-    await sharp(req.file.path).png().toFile(outPath);
-    fs.unlink(req.file.path, () => {});
+      if (!email || !username || !password) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
 
-    const url = `/uploads/${outName}`;
-    return res.json({ success: true, url });
-  } catch (e: any) {
-    return res.status(500).json({ error: e.message ?? "convert failed" });
-  }
-});
+      // ตรวจสอบซ้ำ
+      const [dup] = await conn.query(
+        "SELECT 1 FROM Users WHERE username=? OR email=?",
+        [username, email]
+      );
+      if ((dup as any[]).length > 0) {
+        return res.status(409).json({ error: "Email or username already exists" });
+      }
 
-// GET /users/:id/profile_image  -> คืนเฉพาะรูป
-router.get('/:id/profile_image', async (req, res) => {
-  const [rows] = await conn.query(
-    'SELECT profile_image FROM users WHERE id=?', [req.params.id]
-  );
-  const r = (rows as any[])[0];
-  if (!r) return res.status(404).json({ error: 'Not found' });
-  res.json({ profile_image: r.profile_image });   // ex. "/uploads/....png"
-});
+      // บันทึกรูป profile image (ถ้ามี)
+      let profile_image: string | null = null;
+      const fileArray = (req.files as any)?.profile_image;
+      if (fileArray && fileArray.length > 0) {
+        const file = fileArray[0];
+        const ext = path.extname(file.originalname) || ".png";
+        const newName = `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
+        const newPath = path.join(dir, newName);
+        fs.renameSync(file.path, newPath);
+        profile_image = `/uploads/${newName}`;
+      }
 
-// ถ้าจะดูของ session ปัจจุบัน
-router.get('/me/profile_image', (req, res) => {
-  const u = (req.session as any).user;
-  if (!u) return res.status(401).json({ error: 'Not logged in' });
-  res.json({ profile_image: u.profile_image });
-});
+      // บันทึกลง DB
+      const [result] = await conn.query(
+        "INSERT INTO Users (email, username, password_hash, profile_image) VALUES (?, ?, ?, ?)",
+        [email, username, password, profile_image]
+      );
 
-
-// --- auth/session ---
-router.get("/me", (req, res) => {
-  if (!(req.session as any).user) return res.status(401).json({ error: "Not logged in" });
-  res.json((req.session as any).user);
-});
-
-router.put("/me", isAuth, async (req, res) => {
-  const uid = (req.session as any).user.id;
-  const { username, email, password, profile_image } = req.body;
-
-  const f: string[] = []; const v: any[] = [];
-  if (username) { f.push("username=?"); v.push(username); }
-  if (email)    { f.push("email=?");    v.push(email); }
-  if (password) { f.push("password_hash=?"); v.push(password); } // เปลี่ยนเป็น password_hash
-  if (profile_image) { f.push("profile_image=?"); v.push(profile_image); }
-  if (!f.length) return res.json({ success: true });
-
-  v.push(uid);
-  await conn.query(`UPDATE users SET ${f.join(",")}, updated_at=NOW() WHERE id=?`, v);
-
-  const [rows] = await conn.query("SELECT id, username, email, profile_image, role, wallet, created_at, updated_at FROM users WHERE id = ?", [uid]);
-  (req.session as any).user = (rows as any[])[0];
-  res.json({ success: true, user: (rows as any[])[0] });
-});
-
-// --- misc ---
-router.post("/logout", (req, res) => {
-  req.session.destroy(() => { res.clearCookie("connect.sid"); res.json({ success: true }); });
-});
-
-router.get("/", async (_req, res) => {
-  const [rows] = await conn.query("SELECT id, username, email, profile_image, role, wallet, created_at, updated_at FROM users");
-  res.json(rows);
-});
-
-router.get("/:id", async (req, res) => {
-  const [rows] = await conn.query("SELECT id, username, email, profile_image, role, wallet, created_at, updated_at FROM users WHERE id = ?", [req.params.id]);
-  const users = rows as any[];
-  if (!users.length) return res.status(404).json({ error: "User not found" });
-  res.json(users[0]);
-});
-
-router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const [rows] = await conn.query(
-    "SELECT id, username, email, profile_image, role, wallet, created_at, updated_at FROM users WHERE username = ? AND password_hash = ?",
-    [username, password]
-  );
-  const users = rows as any[];
-  if (!users.length) return res.status(401).json({ error: "Invalid username or password" });
-  (req.session as any).user = users[0];
-  res.json({ success: true, user: users[0] });
-});
-
-router.post("/register", upload.single("profile_image"), async (req, res) => {
-  try {
-    const { email, username, password } = req.body;
-    const file = req.file;
-
-    const [dup] = await conn.query("SELECT 1 FROM users WHERE username=? OR email=?", [username, email]);
-    if ((dup as any[]).length) return res.status(409).json({ error: "Email or username already exists" });
-
-    let profile_image = null;
-    if (file) {
-      const ext = path.extname(file.originalname) || '.png';
-      const newName = `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
-      const newPath = path.join(dir, newName);
-      fs.renameSync(file.path, newPath);
-      profile_image = `/uploads/${newName}`;
+      console.log("REGISTER RESULT:", result);
+      res.json({
+        success: true,
+        userId: (result as any).insertId,
+        profile_image,
+      });
+    } catch (e: any) {
+      console.error("REGISTER ERROR:", e);
+      res.status(500).json({ error: e.message || "Register failed" });
     }
-
-    const [result] = await conn.query(
-      "INSERT INTO users (email, username, password_hash, profile_image) VALUES (?, ?, ?, ?)",
-      [email, username, password, profile_image]
-    );
-
-    res.json({ success: true, userId: (result as any).insertId, profile_image });
-  } catch (e: any) {
-    console.error(e);
-    res.status(500).json({ error: e.message || "Register failed" });
   }
-});
+);
