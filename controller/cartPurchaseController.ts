@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response } from "express"; //controller\cartPurchaseController.ts
 import { conn } from "../dbconnect"; // ใช้ไฟล์ dbconnect.ts ของคุณ
 
 const router = express.Router();
@@ -202,5 +202,14 @@ router.post("/checkout", async (req: Request, res: Response) => {
     connection.release();
   }
 });
+
+// router user
+router.get("/wallet/:userId", async (req, res) => {
+  const userId = req.params.userId;
+  const [rows]: any = await conn.query("SELECT wallet FROM users WHERE id = ?", [userId]);
+  if (rows.length === 0) return res.status(404).json({ message: "User not found" });
+  res.json({ wallet: parseFloat(rows[0].wallet) });
+});
+
 
 export default router;

@@ -171,23 +171,23 @@ router.get("/history/purchase/:userId", async (req: Request, res: Response) => {
   const userId = req.params.userId;
 
   try {
+    
     const [rows]: any = await conn.query(
       `
       SELECT 
-        t.id AS id,
-        g.title AS name,
-        c.category_name AS type,
-        ABS(oi.price) AS price,
+        pi.id AS id,
+        g.name AS name,
+        c.name AS type,
+        pi.price AS price,
         u.username AS username,
-        DATE_FORMAT(t.transaction_date, '%d/%m/%Y %H:%i') AS date
-      FROM transactions t
-      JOIN users u ON u.id = t.user_id
-      JOIN orders o ON o.order_id = t.game_id
-      JOIN order_items oi ON oi.order_id = o.order_id
-      JOIN games g ON g.id = oi.game_id
+        DATE_FORMAT(p.purchase_date, '%d/%m/%Y %H:%i') AS date
+      FROM purchases p
+      JOIN purchase_items pi ON pi.purchase_id = p.id
+      JOIN games g ON g.id = pi.game_id
       JOIN game_categories c ON c.id = g.category_id
-      WHERE t.user_id = ? AND t.type = 'purchase'
-      ORDER BY t.transaction_date DESC
+      JOIN users u ON u.id = p.user_id
+      WHERE p.user_id = ?
+      ORDER BY p.purchase_date DESC
       `,
       [userId]
     );
