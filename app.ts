@@ -1,10 +1,13 @@
+// app.ts 
 import express from "express";
 import session from "express-session";
 import path from "path";
 import cors from "cors";
 
 import { router as users } from "./controller/index";
-import walletRouter from './controller/wallet'; // ✅ เพิ่มตรงนี้
+import walletRouter from './controller/wallet';
+import gameRouter from './controller/game';
+
 
 export const app = express();
 
@@ -29,7 +32,8 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 app.use("/users", users);
 
-// ✅ เพิ่ม wallet router
 app.use("/api/wallet", walletRouter);
+app.use("/games", gameRouter);
+
 
 app.get("/", (_req, res) => res.send("Server is running..."));
