@@ -26,24 +26,49 @@ const upload = multer({ storage });
  * คืนรายการเกม (list)
  */
 // Project/src/app/controller/game.ts
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const sql = `
+    const q = String(req.query.q ?? "").trim();
+    const like = `%${q}%`;
+
+    const baseSelect = `
       SELECT
         g.id AS game_id,
         g.name AS title,
         g.price,
-        g.image_path AS cover_image
+        g.image_path AS cover_image,
+        g.category_id,
+        c.name AS category_name
       FROM games g
-      ORDER BY g.created_at DESC, g.id DESC
+      LEFT JOIN game_categories c ON g.category_id = c.id
     `;
-    const [rows] = await conn.query(sql);
+
+    let sql: string;
+    let params: any[] = [];
+
+    if (q) {
+      sql = `
+        ${baseSelect}
+        WHERE g.name LIKE ? OR c.name LIKE ?
+        ORDER BY g.created_at DESC, g.id DESC
+      `;
+      params = [like, like];
+    } else {
+      sql = `
+        ${baseSelect}
+        ORDER BY g.created_at DESC, g.id DESC
+      `;
+      // params stays []
+    }
+
+    const [rows] = await conn.query(sql, params);
     res.json(rows);
-  } catch (err) {
-    console.error("Query error:", err);
+  } catch (e) {
+    console.error("GET /games error:", e);
     res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลเกม" });
   }
 });
+
 router.get("/categories", async (_req, res) => {
   try {
     const [rows] = await conn.query("SELECT id, name FROM game_categories ORDER BY id ASC");
@@ -189,6 +214,84 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// แทนที่บล็อกเดิมด้วยบล็อกนี้
+router.put('/:id', upload.single('image'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: 'invalid id' });
+  }
+
+  try {
+    // อ่านค่าจาก body (ถ้าอยากให้บางฟิลด์เป็น optional ให้เช็ค before push)
+    const name = req.body.name !== undefined ? String(req.body.name) : undefined;
+    const description = req.body.description !== undefined ? String(req.body.description) : undefined;
+    const category_id = req.body.category_id !== undefined && req.body.category_id !== '' 
+      ? Number(req.body.category_id) 
+      : null;
+    const price = req.body.price !== undefined && req.body.price !== '' 
+      ? Number(req.body.price) 
+      : undefined;
+
+    // สร้างตัวแปรสำหรับ SET และ params แบบ dynamic (ไม่บังคับต้องมีทุกฟิลด์)
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    if (name !== undefined) {
+      setClauses.push('name = ?');
+      params.push(name);
+    }
+    if (description !== undefined) {
+      setClauses.push('description = ?');
+      params.push(description);
+    }
+    // category_id อนุญาตให้เป็น null (จะตั้งเป็น NULL ใน DB)
+    if (req.body.category_id !== undefined) {
+      setClauses.push('category_id = ?');
+      params.push(category_id);
+    }
+    if (price !== undefined) {
+      setClauses.push('price = ?');
+      params.push(price);
+    }
+
+    // ถ้ามีไฟล์ใหม่ ให้เตรียม update image_path และลบไฟล์เก่า (ถ้าไม่ใช่ default)
+    if (req.file) {
+      // อ่าน image_path ปัจจุบัน (เพื่อจะลบไฟล์เก่า)
+      const [rowsOld]: any = await conn.query('SELECT image_path FROM games WHERE id = ?', [id]);
+      const old = (rowsOld as any[])[0]?.image_path;
+
+      const newPath = `/uploads/${req.file.filename}`;
+      setClauses.push('image_path = ?');
+      params.push(newPath);
+
+      // ลบไฟล์เก่าถ้าเป็น path ใน uploads และไม่ใช่ default_game.png
+      if (old && old !== 'default_game.png' && old.startsWith('/uploads/')) {
+        try {
+          const fullOldPath = path.resolve(process.cwd(), '.' + old);
+          if (fs.existsSync(fullOldPath)) fs.unlinkSync(fullOldPath);
+        } catch (e) {
+          console.warn('ลบรูปเก่าไม่สำเร็จ:', e);
+        }
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ message: 'ไม่มีฟิลด์ให้แก้ไข' });
+    }
+
+    const sql = `UPDATE games SET ${setClauses.join(', ')} WHERE id = ?`;
+    params.push(id);
+
+    await conn.query(sql, params);
+    return res.json({ message: 'อัปเดตเกมสำเร็จ' });
+  } catch (err: any) {
+    console.error('PUT /games error:', err);
+    return res.status(500).json({
+      message: 'เกิดข้อผิดพลาดขณะอัปเดตเกม',
+      detail: err?.sqlMessage ?? err?.message ?? err
+    });
+  }
+});
 
 
 export default router;
