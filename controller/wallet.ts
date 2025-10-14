@@ -1,9 +1,15 @@
 // src/routes/wallet.ts
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { conn } from "../dbconnect";
 
 const router = Router();
-
+function isAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = (req.session as any).user;
+  if (!user || user.role !== "ADMIN") {
+    return res.status(403).json({ message: "Forbidden: Admin only" });
+  }
+  next();
+}
 /**
  * GET /api/wallet/:userId
  * ดึงยอดเงินของผู้ใช้
@@ -94,7 +100,7 @@ router.post("/topup", async (req: Request, res: Response) => {
  * GET /api/wallet/admin/transactions
  * ดูธุรกรรมทั้งหมด (Admin)
  */
-router.get("/admin/transactions", async (req: Request, res: Response) => {
+router.get("/admin/transactions", isAdmin, async (req: Request, res: Response) => {
   const { user_id } = req.query;
 
   try {
@@ -147,7 +153,7 @@ router.get("/history/topup/:userId", async (req: Request, res: Response) => {
         t.id AS id,
         t.amount AS amount,
         u.username AS username,
-        DATE_FORMAT(t.transaction_date, '%d/%m/%Y %H:%i') AS date
+        DATE_FORMAT(t.transaction_date, '%Y-%m-%dT%H:%i:%s') AS date
       FROM transactions t
       JOIN users u ON u.id = t.user_id
       WHERE t.user_id = ? AND t.type = 'deposit'
@@ -163,6 +169,7 @@ router.get("/history/topup/:userId", async (req: Request, res: Response) => {
   }
 });
 
+
 /**
  * GET /api/wallet/history/purchase/:userId
  * ดึงประวัติการซื้อเกมของผู้ใช้
@@ -171,7 +178,6 @@ router.get("/history/purchase/:userId", async (req: Request, res: Response) => {
   const userId = req.params.userId;
 
   try {
-    
     const [rows]: any = await conn.query(
       `
       SELECT 
@@ -180,14 +186,14 @@ router.get("/history/purchase/:userId", async (req: Request, res: Response) => {
         c.name AS type,
         pi.price AS price,
         u.username AS username,
-        DATE_FORMAT(p.purchase_date, '%d/%m/%Y %H:%i') AS date
-      FROM purchases p
-      JOIN purchase_items pi ON pi.purchase_id = p.id
+        DATE_FORMAT(p.purchase_date, '%Y-%m-%dT%H:%i:%s') AS date
+      FROM purchase_items pi
+      JOIN purchases p ON pi.purchase_id = p.id
       JOIN games g ON g.id = pi.game_id
       JOIN game_categories c ON c.id = g.category_id
       JOIN users u ON u.id = p.user_id
       WHERE p.user_id = ?
-      ORDER BY p.purchase_date DESC
+      ORDER BY p.purchase_date DESC, pi.id ASC
       `,
       [userId]
     );

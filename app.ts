@@ -8,6 +8,7 @@ import { router as users } from "./controller/index";
 import walletRouter from './controller/wallet';
 import gameRouter from './controller/game';
 import cartRouter from './controller/cartPurchaseController';
+import { router as historyRouter } from './controller/history';
 
 
 export const app = express();
@@ -32,10 +33,14 @@ app.use(session({
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 app.use("/users", users);
+app.use('/users', historyRouter); 
 
 app.use("/api/wallet", walletRouter);
 app.use("/games", gameRouter);
 app.use('/api/cart', cartRouter);
+
+
+
 
 
 app.get("/", (_req, res) => res.send("Server is running..."));

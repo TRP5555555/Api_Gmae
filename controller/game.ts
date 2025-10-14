@@ -1,6 +1,6 @@
 // Project/src/app/controller/game.ts
 import express from "express";
-import { conn } from "../dbconnect"; // ตามโครงโปรเจคของคุณ
+import { conn } from "../dbconnect"; 
 const router = express.Router();
 
 import fs from "fs";

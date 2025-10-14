@@ -56,6 +56,16 @@ router.post("/avatar", upload.single("profile_image"), async (req, res) => {
   }
 });
 
+router.get("/all", async (_req, res) => {
+  try {
+    const [rows] = await conn.query("SELECT id, username, email FROM users ORDER BY id ASC");
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงรายชื่อ user" });
+  }
+});
+
 // GET /users/:id/profile_image  -> คืนเฉพาะรูป
 router.get("/:id/profile_image", async (req, res) => {
   const [rows] = await conn.query(
@@ -64,7 +74,7 @@ router.get("/:id/profile_image", async (req, res) => {
   );
   const r = (rows as any[])[0];
   if (!r) return res.status(404).json({ error: "Not found" });
-  res.json({ profile_image: r.profile_image }); // ex. "http://localhost:3000/uploads/....png"
+  res.json({ profile_image: r.profile_image }); 
 });
 
 // ถ้าจะดูของ session ปัจจุบัน
@@ -151,7 +161,6 @@ router.post("/login", async (req, res) => {
   res.json({ success: true, user: users[0] });
 });
 
-// --- register (fixed) ---
 router.post("/register", upload.single("profile_image"), async (req, res) => {
   try {
     console.log("=== REGISTER FIXED REQUEST ===");
@@ -206,3 +215,4 @@ router.post("/register", upload.single("profile_image"), async (req, res) => {
     res.status(500).json({ error: e.message || "Register failed" });
   }
 });
+
